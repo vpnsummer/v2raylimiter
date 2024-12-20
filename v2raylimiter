@@ -2,7 +2,7 @@
 
 # Path Configuration
 config="/etc/v2raylimiter/config"
-v2ray_config="/etc/v2ray/config.json"
+v2ray_config="/usr/local/x-ui/bin/config.json"
 
 # Create config directory and file if not exist
 if [[ ! -e "$config" ]]; then
