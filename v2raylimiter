@@ -1,0 +1,159 @@
+#!/bin/bash
+
+# Path Configuration
+config="/etc/v2raylimiter/config"
+v2ray_config="/etc/v2ray/config.json"
+
+# Create config directory and file if not exist
+if [[ ! -e "$config" ]]; then
+    mkdir -p /etc/v2raylimiter
+    touch $config
+fi
+configv=$(<$config)
+
+# Helper function: Display usage information
+usage() {
+    cat << "EOF"
+        ____                    _ _           _ _            
+ __   _|___ \ _ __ __ _ _   _  | (_)_ __ ___ (_) |_ ___ _ __ 
+ \ \ / / __) | '__/ _` | | | | | | | '_ ` _ \| | __/ _ \ '__|
+  \ V / / __/| | | (_| | |_| | | | | | | | | | | ||  __/ |   
+   \_/ |_____|_|  \__,_|\__, | |_|_|_| |_| |_|_|\__\___|_|   
+                        |___/                                
+
+USAGE:
+  v2raylimiter [options]
+
+OPTIONS:
+  -r, --run                         Run the user limiter
+  -c, --clear-iptables              Clear iptable rules created by the user limiter
+  -h, --help                        Show this help page
+  -l, --list-ports                  Show list of ports and their info
+  -L, --live-list-ports             Show live list of ports and their info
+  -a, --add-port PORT:LIMITRATE     Add new port with format PORT:LIMITRATE
+  -d, --delete-port PORT            Delete an existing port from list
+  -n, --change-limitrate PORT:LIMIT Update limit rate for an existing port
+EOF
+}
+
+# Function: Add new port with limit rate
+addport() {
+    local exist=$(awk -v port="$new_port" '$1 == port {print $1}' $config)
+    if [[ -z $exist ]]; then
+        echo -e "$new_port\t$newlimitrate\tOPEN" >> $config
+        echo -e "\nPort $new_port with limitrate $newlimitrate added successfully\n"
+    else
+        echo -e "\nThis port already exists. Use -n to update limitrate or -d to delete.\n"
+    fi
+}
+
+# Function: Delete port from the list
+deleteport() {
+    local exist=$(awk -v port="$dport" '$1 == port {print $1}' $config)
+    if [[ -z $exist ]]; then
+        echo -e "\nPort $dport does not exist in the list\n"
+    else
+        sed -i "/^$dport\t/d" $config
+        echo -e "\nPort $dport deleted successfully\n"
+    fi
+}
+
+# Function: Change limit rate for an existing port
+changelimit() {
+    local exist=$(awk -v port="$cport" '$1 == port {print $1}' $config)
+    if [[ -z $exist ]]; then
+        echo -e "\nPort $cport does not exist in the list\n"
+    else
+        awk -v port="$cport" -v newrate="$cnewlimitrate" 'BEGIN {FS=OFS="\t"} $1 == port {$2 = newrate}1' $config > tmp && mv tmp $config
+        echo -e "\nLimit rate for port $cport updated to $cnewlimitrate\n"
+    fi
+}
+
+# Function: Clear iptables rules created by user limiter
+cleariptables() {
+    iptables -L INPUT --line-numbers | grep "FOR USERLIMITER" | awk '{print $1}' | tac | xargs -I {} iptables -D INPUT {}
+    iptables -L | grep USERLIMITER_PORT | awk '{print $2}' | xargs -I {} iptables -F {}
+    iptables -L | grep USERLIMITER_PORT | awk '{print $2}' | xargs -I {} iptables -X {}
+    awk 'BEGIN {FS=OFS="\t"} {$3 = "OPEN"}1' $config > tmp && mv tmp $config
+    echo "Iptables rules and chains cleared."
+}
+
+# Function: Run the user limiter
+runuserlimiter() {
+    cleariptables
+    while true; do
+        configv=$(<$config)
+        users=$(jq -r '.inbounds[].settings.clients[] | {email: .email, id: .id}' $v2ray_config)
+        for line in $users; do
+            email=$(echo $line | jq -r '.email')
+            uuid=$(echo $line | jq -r '.id')
+            port=$(awk -v mail="$email" '$1 == mail {print $3}' $config)
+            limit=$(awk -v mail="$email" '$1 == mail {print $2}' $config)
+            nusers=$(netstat -atun | grep -w $port | grep ESTABLISHED | wc -l)
+
+            if [[ $nusers -ge $limit ]]; then
+                iptables -A INPUT -p tcp --dport $port -j REJECT -m comment --comment "LIMIT $email"
+            else
+                iptables -D INPUT -p tcp --dport $port -j REJECT -m comment --comment "LIMIT $email"
+            fi
+        done
+        sleep 2
+    done
+}
+
+# Parse arguments and run corresponding functions
+options=$(getopt -q -o rchlLa:d:n: --long run,clear-iptables,help,list-ports,live-list-ports,add-port:,delete-port:,change-limitrate: -- "$@")
+[[ $? -eq 0 ]] || {
+    echo -e "\nINCORRECT OPTIONS PROVIDED\n"
+    usage
+    exit 1
+}
+eval set -- "$options"
+while true; do
+    case "$1" in
+        -r|--run)
+            runuserlimiter
+            ;;
+        -c|--clear-iptables)
+            cleariptables
+            ;;
+        -h|--help)
+            usage
+            exit 1
+            ;;
+        -a|--add-port)
+            shift
+            if [[ "$1" =~ ^[0-9]+:[0-9]+$ ]]; then
+                new_port=$(echo $1 | cut -d':' -f1)
+                newlimitrate=$(echo $1 | cut -d':' -f2)
+                addport
+            else
+                echo -e "\nInvalid format! Use PORT:LIMITRATE\n"
+            fi
+            ;;
+        -d|--delete-port)
+            shift
+            if [[ "$1" =~ ^[0-9]+$ ]]; then
+                dport=$1
+                deleteport
+            else
+                echo -e "\nInvalid format! Use PORT\n"
+            fi
+            ;;
+        -n|--change-limitrate)
+            shift
+            if [[ "$1" =~ ^[0-9]+:[0-9]+$ ]]; then
+                cport=$(echo $1 | cut -d':' -f1)
+                cnewlimitrate=$(echo $1 | cut -d':' -f2)
+                changelimit
+            else
+                echo -e "\nInvalid format! Use PORT:LIMITRATE\n"
+            fi
+            ;;
+        --)
+            shift
+            break
+            ;;
+    esac
+    shift
+done
