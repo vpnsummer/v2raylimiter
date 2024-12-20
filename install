@@ -23,7 +23,7 @@ then
     fi
 
     # Check for V2Ray config.json
-    if [[ ! -f /etc/v2ray/config.json ]]; then
+    if [[ ! -f /usr/local/x-ui/bin/config.json ]]; then
         echo -e "\nError: V2Ray 'config.json' not found at /etc/v2ray/config.json. Please ensure it's configured correctly.\n"
         exit 1
     fi
