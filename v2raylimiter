@@ -1,0 +1,342 @@
+#!/bin/bash
+
+# Path Configuration
+config="/etc/v2raylimiter/config"
+v2ray_config="/usr/local/x-ui/bin/config.json"
+
+# Create config directory and file if not exist
+if [[ ! -e "$config" ]]; then
+    mkdir -p /etc/v2raylimiter
+    touch "$config"
+fi
+
+# Helper function: Display usage information
+usage() {
+    cat << "EOF"
+        ____                    _ _           _ _            
+ __   _|___ \ _ __ __ _ _   _  | (_)_ __ ___ (_) |_ ___ _ __ 
+ \ \ / / __) | '__/ _` | | | | | | | '_ ` _ \| | __/ _ \ '__|
+  \ V / / __/| | | (_| | |_| | | | | | | | | | | ||  __/ |   
+   \_/ |_____|_|  \__,_|\__, | |_|_|_| |_| |_|_|\__\___|_|   
+                        |___/                                
+
+USAGE:
+  v2raylimiter [options]
+
+OPTIONS:
+  -r, --run                         Run the user limiter
+  -c, --clear-iptables             Clear iptable rules
+  -h, --help                       Show this help page
+  -l, --list                       List all users and their limits
+  -a, --add EMAIL:PORT:LIMIT       Add/Update user (e.g., user@mail.com:443:2)
+  -d, --delete EMAIL               Delete user
+  -s, --status                     Show current connections
+EOF
+}
+
+# Function: Add or update user
+add_user() {
+    local email="$1"
+    local port="$2"
+    local limit="$3"
+    
+    # Delete existing entry if any
+    sed -i "/^$email[[:space:]]/d" "$config"
+    
+    # Add new entry
+    echo -e "$email\t$port\t$limit" >> "$config"
+    echo "User $email added/updated successfully"
+}
+
+# Function: Delete user
+delete_user() {
+    local email="$1"
+    if grep -q "^$email[[:space:]]" "$config"; then
+        sed -i "/^$email[[:space:]]/d" "$config"
+        echo "User $email deleted successfully"
+    else
+        echo "User $email not found"
+    fi
+}
+
+# Function: List users
+list_users() {
+    if [[ -s "$config" ]]; then
+        echo -e "\nCurrent Users:"
+        echo -e "EMAIL\t\tPORT\tLIMIT"
+        echo "----------------------------------------"
+        cat "$config"
+        echo
+    else
+        echo "No users configured"
+    fi
+}
+
+# Function: Show current connections
+show_status() {
+    echo -e "\nCurrent Connections:"
+    echo -e "EMAIL\t\tPORT\tLIMIT\tCONNECTED"
+    echo "------------------------------------------------"
+    
+    while IFS=$'\t' read -r email port limit; do
+        if [[ -n "$email" ]]; then
+            connected=$(netstat -antp | grep ":$port" | grep ESTABLISHED | wc -l)
+            echo -e "$email\t$port\t$limit\t$connected"
+        fi
+    done < "$config"
+    echo
+}
+
+# Function: Clear iptables rules
+clear_iptables() {
+    echo "Clearing iptables rules..."
+    
+    # Remove existing rules
+    iptables-save | grep -v "v2ray-limit" | iptables-restore
+    
+    # Remove user-specific chains
+    for chain in $(iptables -L | grep "v2ray-limit" | awk '{print $2}'); do
+        iptables -F "$chain" 2>/dev/null
+        iptables -X "$chain" 2>/dev/null
+    done
+    
+    echo "Iptables rules cleared"
+}
+
+# Function: Run the limiter
+#!/bin/bash
+
+# Path Configuration
+config="/etc/v2raylimiter/config"
+v2ray_config="/usr/local/x-ui/bin/config.json"
+
+# Create config directory and file if not exist
+if [[ ! -e "$config" ]]; then
+    mkdir -p /etc/v2raylimiter
+    touch "$config"
+fi
+
+# Helper function: Display usage information
+usage() {
+    cat << "EOF"
+        ____                    _ _           _ _            
+ __   _|___ \ _ __ __ _ _   _  | (_)_ __ ___ (_) |_ ___ _ __ 
+ \ \ / / __) | '__/ _` | | | | | | | '_ ` _ \| | __/ _ \ '__|
+  \ V / / __/| | | (_| | |_| | | | | | | | | | | ||  __/ |   
+   \_/ |_____|_|  \__,_|\__, | |_|_|_| |_| |_|_|\__\___|_|   
+                        |___/                                
+
+USAGE:
+  v2raylimiter [options]
+
+OPTIONS:
+  -r, --run                         Run the user limiter
+  -c, --clear-iptables             Clear iptable rules
+  -h, --help                       Show this help page
+  -l, --list                       List all users and their limits
+  -a, --add EMAIL:PORT:LIMIT       Add/Update user (e.g., user@mail.com:443:2)
+  -d, --delete EMAIL               Delete user
+  -s, --status                     Show current connections
+EOF
+}
+
+# Function: Add or update user
+add_user() {
+    local email="$1"
+    local port="$2"
+    local limit="$3"
+    
+    # Delete existing entry if any
+    sed -i "/^$email[[:space:]]/d" "$config"
+    
+    # Add new entry
+    echo -e "$email\t$port\t$limit" >> "$config"
+    echo "User $email added/updated successfully"
+}
+
+# Function: Delete user
+delete_user() {
+    local email="$1"
+    if grep -q "^$email[[:space:]]" "$config"; then
+        sed -i "/^$email[[:space:]]/d" "$config"
+        echo "User $email deleted successfully"
+    else
+        echo "User $email not found"
+    fi
+}
+
+# Function: List users
+list_users() {
+    if [[ -s "$config" ]]; then
+        echo -e "\nCurrent Users:"
+        echo -e "EMAIL\t\tPORT\tLIMIT"
+        echo "----------------------------------------"
+        cat "$config"
+        echo
+    else
+        echo "No users configured"
+    fi
+}
+
+# Function: Show current connections
+show_status() {
+    echo -e "\nCurrent Connections:"
+    echo -e "EMAIL\t\tPORT\tLIMIT\tCONNECTED"
+    echo "------------------------------------------------"
+    
+    while IFS=$'\t' read -r email port limit; do
+        if [[ -n "$email" ]]; then
+            connected=$(netstat -antp | grep ":$port" | grep ESTABLISHED | wc -l)
+            echo -e "$email\t$port\t$limit\t$connected"
+        fi
+    done < "$config"
+    echo
+}
+
+# Function: Clear iptables rules
+clear_iptables() {
+    echo "Clearing iptables rules..."
+    
+    # Remove existing rules
+    iptables-save | grep -v "v2ray-limit" | iptables-restore
+    
+    # Remove user-specific chains
+    for chain in $(iptables -L | grep "v2ray-limit" | awk '{print $2}'); do
+        iptables -F "$chain" 2>/dev/null
+        iptables -X "$chain" 2>/dev/null
+    done
+    
+    echo "Iptables rules cleared"
+}
+
+# Function: Run the limiter
+run_limiter() {
+    echo "Starting V2Ray user limiter..."
+    clear_iptables
+    
+    while true; do
+        while IFS=$'\t' read -r email port limit; do
+            if [[ -n "$email" ]]; then
+                chain_name="v2ray-limit-$port"
+                
+                # Create chain if it doesn't exist
+                iptables -N "$chain_name" 2>/dev/null
+                iptables -F "$chain_name"
+                
+                # Count current connections
+                connected=$(netstat -antp | grep ":$port" | grep ESTABLISHED | wc -l)
+                
+                # Apply limits
+                if [[ $connected -ge $limit ]]; then
+                    iptables -A "$chain_name" -p tcp --dport "$port" -j REJECT --reject-with tcp-reset
+                    iptables -A "$chain_name" -p udp --dport "$port" -j REJECT
+                else
+                    iptables -A "$chain_name" -j RETURN
+                fi
+                
+                # Ensure rule exists in INPUT chain
+                if ! iptables -C INPUT -p tcp --dport "$port" -j "$chain_name" 2>/dev/null; then
+                    iptables -I INPUT -p tcp --dport "$port" -j "$chain_name"
+                fi
+                if ! iptables -C INPUT -p udp --dport "$port" -j "$chain_name" 2>/dev/null; then
+                    iptables -I INPUT -p udp --dport "$port" -j "$chain_name"
+                fi
+            fi
+        done < "$config"
+        
+        sleep 1
+    done
+}
+
+# Main script
+case "$1" in
+    -r|--run)
+        run_limiter
+        ;;
+    -c|--clear-iptables)
+        clear_iptables
+        ;;
+    -h|--help)
+        usage
+        ;;
+    -l|--list)
+        list_users
+        ;;
+    -a|--add)
+        if [[ "$2" =~ ^[^:]+:[0-9]+:[0-9]+$ ]]; then
+            email=$(echo "$2" | cut -d: -f1)
+            port=$(echo "$2" | cut -d: -f2)
+            limit=$(echo "$2" | cut -d: -f3)
+            add_user "$email" "$port" "$limit"
+        else
+            echo "Invalid format. Use: EMAIL:PORT:LIMIT"
+            exit 1
+        fi
+        ;;
+    -d|--delete)
+        if [[ -n "$2" ]]; then
+            delete_user "$2"
+        else
+            echo "Please specify email to delete"
+            exit 1
+        fi
+        ;;
+    -s|--status)
+        show_status
+        ;;
+    *)
+        usage
+        exit 1
+        ;;
+esac￼Enterrun_limiter() {
+    echo "Starting V2Ray user limiter..."
+    clear_iptables
+    
+    while true; do
+        while IFS=$'\t' read -r email port limit; do
+            if [[ -n "$email" ]]; then
+                chain_name="v2ray-limit-$port"
+                
+                # Create chain if it doesn't exist
+                iptables -N "$chain_name" 2>/dev/null
+                iptables -F "$chain_name"
+                
+                # Count current connections
+                connected=$(netstat -antp | grep ":$port" | grep ESTABLISHED | wc -l)
+                
+                # Apply limits
+                if [[ $connected -ge $limit ]]; then
+                    iptables -A "$chain_name" -p tcp --dport "$port" -j REJECT --reject-with tcp-reset
+                    iptables -A "$chain_name" -p udp --dport "$port" -j REJECT
+                else
+                    iptables -A "$chain_name" -j RETURN
+                fi
+                
+                # Ensure rule exists in INPUT chain
+                if ! iptables -C INPUT -p tcp --dport "$port" -j "$chain_name" 2>/dev/null; then
+              iptables -I INPUT -p tcp --dport "$port" -j "$chain_name"
+                fi
+                if ! iptables -C INPUT -p udp --dport "$port" -j "$chain_name" 2>/dev/null; then
+                    iptables -I INPUT -p udp --dport "$port" -j "$chain_name"
+                fi
+            fi
+        done < "$config"
+        
+        sleep 1
+    done
+}
+
+# Main script
+case "$1" in
+    -r|--run)
+        run_limiter
+        ;;
+    -c|--clear-iptables)
+        clear_iptables
+        ;;
+    -h|--help)
+        usage
+        ;;
+    -l|--list)
+        list_users
+        ;;
